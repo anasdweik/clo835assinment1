@@ -20,7 +20,6 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: us-east-1
 
       - name: Login to Amazon ECR
@@ -29,21 +28,25 @@ jobs:
 
       - name: Build, Tag, and Push MySQL Image
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
           ECR_REPOSITORY: mysql-database
           IMAGE_TAG: latest
         run: |
+          echo "🔹 Building MySQL Docker Image..."
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile_mysql .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "✅ MySQL Image pushed successfully."
 
       - name: Build, Tag, and Push Web App Image
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
           ECR_REPOSITORY: employee-database-app
           IMAGE_TAG: latest
         run: |
+          echo "🔹 Building Web App Docker Image..."
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "✅ Web App Image pushed successfully."
 
   deploy-infrastructure:
     name: Deploy AWS Infrastructure with Terraform
@@ -59,7 +62,6 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: us-east-1
 
       - name: Install Terraform
@@ -77,9 +79,13 @@ jobs:
         working-directory: terraform
         run: terraform apply -auto-approve
 
-      - name: Get EC2 Public IP from Terraform
+      - name: Retrieve EC2 Public IP
         working-directory: terraform
-        run: echo "EC2_PUBLIC_IP=$(terraform output -raw ec2_public_ip)" >> $GITHUB_ENV
+        run: |
+          echo "🔹 Fetching EC2 Public IP..."
+          EC2_IP=$(terraform output -raw ec2_public_ip)
+          echo "✅ EC2 Public IP: $EC2_IP"
+          echo "EC2_PUBLIC_IP=$EC2_IP" >> $GITHUB_ENV
 
   deploy-app:
     name: Deploy Application on EC2
@@ -98,21 +104,47 @@ jobs:
           echo "🔹 Connecting to EC2 at $EC2_HOST..."
           ssh -o StrictHostKeyChecking=no -i vockey.pem ec2-user@$EC2_HOST << 'EOF'
             set -e  
+            echo "✅ Connected successfully!"
 
+            echo "🔹 Updating system packages..."
             sudo yum update -y
+
+            echo "🔹 Installing Docker..."
             sudo yum install -y docker
             sudo systemctl start docker
             sudo usermod -aG docker ec2-user
 
+            echo "🔹 Logging in to Amazon ECR..."
             aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
 
+            echo "🔹 Pulling MySQL Docker Image..."
             docker pull ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
-            docker run -d --name mysql-db -e MYSQL_ROOT_PASSWORD=rootpassword -e MYSQL_DATABASE=employee_db ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
+            echo "✅ MySQL image pulled successfully."
 
+            echo "🔹 Starting MySQL Container..."
+            docker run -d --name mysql-db -e MYSQL_ROOT_PASSWORD=rootpassword -e MYSQL_DATABASE=employee_db ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
+            echo "✅ MySQL container started."
+
+            echo "⏳ Waiting for MySQL to initialize..."
             sleep 20
 
+            echo "🔹 Pulling Web App Docker Image..."
             docker pull ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
-            docker run -d -p 8080:8080 --link mysql-db:mysql --name web-app \
-              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db \
+            echo "✅ Web app image pulled successfully."
+
+            echo "🔹 Starting Web App Containers with Different Background Colors..."
+            
+            docker run -d -p 8080:8080 --link mysql-db:mysql --name web-app-1 \
+              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db -e BG_COLOR=red \
               ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
+
+            docker run -d -p 8081:8080 --link mysql-db:mysql --name web-app-2 \
+              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db -e BG_COLOR=blue \
+              ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
+
+            docker run -d -p 8082:8080 --link mysql-db:mysql --name web-app-3 \
+              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db -e BG_COLOR=green \
+              ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
+
+            echo "✅ Web app containers deployed successfully!"
           EOF
