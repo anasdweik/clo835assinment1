@@ -2,64 +2,32 @@ provider "aws" {
   region = "us-east-1"
 }
 
-# Create a Security Group
-resource "aws_security_group" "web_sg" {
-  name        = "web-sg"
-  description = "Allow inbound traffic on port 8080 and SSH access"
-
-  # Allow HTTP (8080) traffic
-  ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Allow SSH (22) access
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Allow all outbound traffic
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+# 🔹 Use existing Security Group (web-sg) instead of creating a new one
+data "aws_security_group" "existing_sg" {
+  filter {
+    name   = "group-name"
+    values = ["web-sg"]  # ✅ Use existing security group
   }
 }
 
-# Create an EC2 instance
+# 🔹 Deploy EC2 instance
 resource "aws_instance" "web_server" {
-  ami           = "ami-0c614dee691cbbf37"  # ✅ Update this with the correct AMI ID for your region
+  ami           = "ami-0c614dee691cbbf37"  # ✅ Correct AMI ID for your region
   instance_type = "t2.micro"
-  key_name      = "vockey.pem"  # ✅ Replace with your actual key pair name
-  security_groups = [aws_security_group.web_sg.name]
+  key_name      = "vockey"  # ✅ Your EC2 key pair
+  vpc_security_group_ids = [data.aws_security_group.existing_sg.id]  # ✅ Attach existing Security Group
 
   tags = {
     Name = "Employee-Database-App-Server"
   }
 }
 
-# Web App ECR Repository (Prevent Recreation)
-resource "aws_ecr_repository" "web_app_repo" {
+# 🔹 Use existing ECR repository for Web App
+data "aws_ecr_repository" "web_app_repo" {
   name = "employee-database-app"
-
-  lifecycle {
-    ignore_changes = [name]  # Prevent Terraform from failing if repo already exists
-  }
 }
 
-# MySQL ECR Repository (Prevent Recreation)
-resource "aws_ecr_repository" "mysql_repo" {
+# 🔹 Use existing ECR repository for MySQL
+data "aws_ecr_repository" "mysql_repo" {
   name = "mysql-database"
-
-  lifecycle {
-    ignore_changes = [name]
-  }
 }
-
-
