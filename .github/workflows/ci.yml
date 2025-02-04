@@ -1,30 +1,27 @@
-name: CI/CD Pipeline
+name: Build and Deploy to AWS EC2
 
 on:
   push:
     branches:
-      - development  # Trigger on push to the development branch
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  build:
+  build_and_push:
     runs-on: ubuntu-latest
-
     steps:
+      # Checkout the repository code
       - name: Checkout code
         uses: actions/checkout@v2
-
+        
+      # Set up Docker Buildx
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
-
-      - name: Log in to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v1
-
-      - name: Build and push Docker images
-        run: |
-          docker build -f Dockerfile_mysql -t ${{ secrets.ECR_REPOSITORY }}-mysql .
-          docker build -f Dockerfile -t ${{ secrets.ECR_REPOSITORY }}-app .
-          docker tag ${{ secrets.ECR_REPOSITORY }}-mysql:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}-mysql:latest
-          docker tag ${{ secrets.ECR_REPOSITORY }}-app:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}-app:latest
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}-mysql:latest
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}-app:latest
-
+        
+      # Cache Docker layers for faster builds
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
