@@ -44,12 +44,21 @@ resource "aws_instance" "web_server" {
   }
 }
 
-# Create an ECR Repository for Web App
+# Web App ECR Repository
 resource "aws_ecr_repository" "web_app_repo" {
   name = "employee-database-app"
+
+  lifecycle {
+    ignore_changes = [name]  # Prevent Terraform from failing if repo already exists
+  }
 }
 
-# Create an ECR Repository for MySQL
+# MySQL ECR Repository
 resource "aws_ecr_repository" "mysql_repo" {
   name = "mysql-database"
+
+  lifecycle {
+    ignore_changes = [name]
+  }
 }
+
