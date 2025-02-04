@@ -34,9 +34,9 @@ resource "aws_security_group" "web_sg" {
 
 # Create an EC2 instance
 resource "aws_instance" "web_server" {
-  ami           = "ami-0c55b159cbfafe1f0"  # ✅ Update this with the correct AMI ID for your region
+  ami           = "ami-0c614dee691cbbf37"  # ✅ Update this with the correct AMI ID for your region
   instance_type = "t2.micro"
-  key_name      = "your-key-pair"  # ✅ Replace with your actual key pair name
+  key_name      = "vockey.pem"  # ✅ Replace with your actual key pair name
   security_groups = [aws_security_group.web_sg.name]
 
   tags = {
