@@ -20,7 +20,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}  # Ensure session token is used if required
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}  # Ensure session token is included if required
           aws-region: us-east-1
 
       - name: Login to Amazon ECR
@@ -29,15 +29,27 @@ jobs:
 
       - name: Build and Push MySQL Image
         run: |
+          echo "🔹 Building MySQL Docker Image..."
           docker build -t mysql-database -f Dockerfile_mysql .
+          
+          echo "🔹 Tagging MySQL Image..."
           docker tag mysql-database:latest ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
+          
+          echo "🔹 Pushing MySQL Image to AWS ECR..."
           docker push ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
+          echo "✅ MySQL Image pushed successfully."
 
       - name: Build and Push Web App Image
         run: |
+          echo "🔹 Building Web App Docker Image..."
           docker build -t employee-database-app -f Dockerfile .
+          
+          echo "🔹 Tagging Web App Image..."
           docker tag employee-database-app:latest ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
+          
+          echo "🔹 Pushing Web App Image to AWS ECR..."
           docker push ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
+          echo "✅ Web App Image pushed successfully."
 
   deploy-infrastructure:
     name: Deploy AWS Infrastructure with Terraform
@@ -53,22 +65,30 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}  # Ensure this is included
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}  # Ensure session token is included
           aws-region: us-east-1
 
       - name: Install Terraform
         run: |
+          echo "🔹 Installing Terraform..."
           sudo apt-get update && sudo apt-get install -y unzip
           curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
           sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
           sudo apt-get update && sudo apt-get install terraform
           terraform --version  # Verify Terraform installation
+          echo "✅ Terraform installed successfully."
 
       - name: Initialize Terraform
-        run: terraform init
+        run: |
+          echo "🔹 Initializing Terraform..."
+          terraform init
+          echo "✅ Terraform initialized."
 
       - name: Apply Terraform Plan
-        run: terraform apply -auto-approve
+        run: |
+          echo "🔹 Applying Terraform Configuration..."
+          terraform apply -auto-approve
+          echo "✅ Infrastructure deployed successfully."
 
   deploy-app:
     name: Deploy Application on EC2
@@ -84,7 +104,10 @@ jobs:
           echo "$PRIVATE_KEY" > ec2-key.pem
           chmod 600 ec2-key.pem
 
+          echo "🔹 Connecting to EC2..."
           ssh -o StrictHostKeyChecking=no -i ec2-key.pem ec2-user@$EC2_HOST << 'EOF'
+            set -e  # Exit script on error
+
             echo "🔹 Updating system packages..."
             sudo yum update -y
 
@@ -105,7 +128,7 @@ jobs:
             echo "✅ MySQL container started."
 
             echo "⏳ Waiting for MySQL to initialize..."
-            sleep 10  # Give MySQL some time to start before the web app tries to connect
+            sleep 20  # Increased wait time to ensure MySQL starts properly
 
             echo "🔹 Pulling Web App Docker Image..."
             docker pull ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
