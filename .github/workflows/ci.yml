@@ -1,60 +1,100 @@
-name: CI/CD Pipeline for Web App Deployment
+name: CI/CD Pipeline for Employee Database App
 
 on:
   push:
     branches:
-      - main
+      - main  # Trigger when pushing to the main branch
+  workflow_dispatch:  # Allow manual runs
 
 jobs:
-  deploy:
+  build-and-push:
+    name: Build & Push Docker Images to AWS ECR
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        run: |
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+
+      - name: Build and Push MySQL Image
+        run: |
+          docker build -t mysql-database -f Dockerfile_mysql .
+          docker tag mysql-database:latest ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
+          docker push ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
+
+      - name: Build and Push Web App Image
+        run: |
+          docker build -t employee-database-app -f Dockerfile .
+          docker tag employee-database-app:latest ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
+          docker push ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
+
+  deploy-infrastructure:
+    name: Deploy Infrastructure using Terraform
+    runs-on: ubuntu-latest
+    needs: build-and-push  # Run only after Docker images are built and pushed
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: latest
+        run: |
+          sudo apt-get update && sudo apt-get install -y unzip
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+          sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+          sudo apt-get update && sudo apt-get install terraform
 
       - name: Initialize Terraform
         run: terraform init
 
-      - name: Apply Terraform (Deploy EC2 and ECR)
+      - name: Apply Terraform Plan
         run: terraform apply -auto-approve
 
-      - name: Log in to Amazon ECR
-        run: |
-          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+  deploy-app:
+    name: Deploy Application on EC2
+    runs-on: ubuntu-latest
+    needs: deploy-infrastructure  # Run only after infrastructure is deployed
 
-      - name: Build and Push MySQL Image
+    steps:
+      - name: SSH into EC2 & Deploy Containers
+        env:
+          PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          EC2_HOST: ${{ secrets.EC2_PUBLIC_IP }}
         run: |
-          docker build -t mysql-database -f Dockerfile_mysql .
-          docker tag mysql-database:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mysql-database:latest
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mysql-database:latest
+          echo "$PRIVATE_KEY" > ec2-key.pem
+          chmod 600 ec2-key.pem
 
-      - name: Build and Push Web App Image
-        run: |
-          docker build -t employee-database-app -f Dockerfile .
-          docker tag employee-database-app:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/employee-database-app:latest
-          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/employee-database-app:latest
+          ssh -o StrictHostKeyChecking=no -i ec2-key.pem ec2-user@$EC2_HOST << 'EOF'
+            sudo yum update -y
+            sudo yum install -y docker
+            sudo systemctl start docker
+            sudo usermod -aG docker ec2-user
 
-      - name: Deploy Containers on EC2
-        run: |
-          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > private_key.pem
-          chmod 600 private_key.pem
-          ssh -o StrictHostKeyChecking=no -i private_key.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
-            docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mysql-database:latest
-            docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/employee-database-app:latest
-            
-            docker run -d --name mysql-db -e MYSQL_ROOT_PASSWORD=rootpassword -p 3306:3306 ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mysql-database:latest
-            docker run -d -p 8080:8080 --link mysql-db:mysql --name web-app -e DBPORT=3306 -e DBHOST=mysql-db -e DBUSER=root -e DBPASS=rootpassword -e DBNAME=employee_db ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/employee-database-app:latest
+            aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+
+            docker pull ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
+            docker run -d --name mysql-db -e MYSQL_ROOT_PASSWORD=rootpassword -e MYSQL_DATABASE=employee_db ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
+
+            docker pull ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
+            docker run -d -p 8080:8080 --link mysql-db:mysql --name web-app \
+              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db \
+              ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
           EOF
