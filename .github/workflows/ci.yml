@@ -20,7 +20,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}  # Ensure session token is used if required
           aws-region: us-east-1
 
       - name: Login to Amazon ECR
@@ -41,9 +41,9 @@ jobs:
           docker push ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
 
   deploy-infrastructure:
-    name: Deploy Infrastructure using Terraform
+    name: Deploy AWS Infrastructure with Terraform
     runs-on: ubuntu-latest
-    needs: build-and-push  # Run only after Docker images are built and pushed
+    needs: build-and-push  # Ensure this runs only after Docker images are pushed
 
     steps:
       - name: Checkout Repository
@@ -54,6 +54,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}  # Ensure this is included
           aws-region: us-east-1
 
       - name: Install Terraform
@@ -62,6 +63,7 @@ jobs:
           curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
           sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
           sudo apt-get update && sudo apt-get install terraform
+          terraform --version  # Verify Terraform installation
 
       - name: Initialize Terraform
         run: terraform init
@@ -72,7 +74,7 @@ jobs:
   deploy-app:
     name: Deploy Application on EC2
     runs-on: ubuntu-latest
-    needs: deploy-infrastructure  # Run only after infrastructure is deployed
+    needs: deploy-infrastructure  # Ensure this runs only after infrastructure is set up
 
     steps:
       - name: SSH into EC2 & Deploy Containers
@@ -84,18 +86,37 @@ jobs:
           chmod 600 ec2-key.pem
 
           ssh -o StrictHostKeyChecking=no -i ec2-key.pem ec2-user@$EC2_HOST << 'EOF'
+            echo "🔹 Updating system packages..."
             sudo yum update -y
+
+            echo "🔹 Installing Docker..."
             sudo yum install -y docker
             sudo systemctl start docker
             sudo usermod -aG docker ec2-user
 
+            echo "🔹 Logging in to Amazon ECR..."
             aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
 
+            echo "🔹 Pulling MySQL Docker Image..."
             docker pull ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
-            docker run -d --name mysql-db -e MYSQL_ROOT_PASSWORD=rootpassword -e MYSQL_DATABASE=employee_db ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
+            echo "✅ MySQL image pulled successfully."
 
+            echo "🔹 Starting MySQL Container..."
+            docker run -d --name mysql-db -e MYSQL_ROOT_PASSWORD=rootpassword -e MYSQL_DATABASE=employee_db ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
+            echo "✅ MySQL container started."
+
+            echo "⏳ Waiting for MySQL to initialize..."
+            sleep 10  # Give MySQL some time to start before the web app tries to connect
+
+            echo "🔹 Pulling Web App Docker Image..."
             docker pull ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
+            echo "✅ Web app image pulled successfully."
+
+            echo "🔹 Starting Web App Container..."
             docker run -d -p 8080:8080 --link mysql-db:mysql --name web-app \
               -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db \
               ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
+            echo "✅ Web app container started."
+
+            echo "🔹 Deployment completed successfully!"
           EOF
