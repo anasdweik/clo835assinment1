@@ -16,15 +16,24 @@ DBPORT = int(os.environ.get("DBPORT"))
 
 # Create a connection to the MySQL database
 db_conn = connections.Connection(
-    host= DBHOST,
-    port=DBPORT,
-    user= DBUSER,
-    password= DBPWD, 
-    db= DATABASE
-    
+    host="mysql-db",  # MySQL container name
+    port=3306,         # MySQL default port
+    user="root",       # MySQL root user
+    password="rootpassword",  # Make sure this matches the password set above
+    db="employees"
 )
+
+
+
+
+
+
+
+
+
+
 output = {}
-table = 'employee';
+table = 'employees';
 
 # Define the supported color codes
 color_codes = {
