@@ -20,7 +20,6 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: us-east-1
 
       - name: Login to Amazon ECR
@@ -29,7 +28,7 @@ jobs:
 
       - name: Build, Tag, and Push MySQL Image
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
           ECR_REPOSITORY: mysql-database
           IMAGE_TAG: latest
         run: |
@@ -40,7 +39,7 @@ jobs:
 
       - name: Build, Tag, and Push Web App Image
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
           ECR_REPOSITORY: employee-database-app
           IMAGE_TAG: latest
         run: |
@@ -63,32 +62,28 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: us-east-1
 
       - name: Install Terraform
         run: |
-          echo "🔹 Installing Terraform..."
           sudo apt-get update && sudo apt-get install -y unzip
           curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
           sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
           sudo apt-get update && sudo apt-get install terraform
           terraform --version
-          echo "✅ Terraform installed successfully."
 
       - name: Initialize Terraform
         working-directory: terraform
-        run: |
-          echo "🔹 Initializing Terraform..."
-          terraform init
-          echo "✅ Terraform initialized."
+        run: terraform init
 
-      - name: Apply Terraform Plan
+      - name: Apply Terraform & Get EC2 IP
         working-directory: terraform
         run: |
-          echo "🔹 Applying Terraform Configuration..."
+          echo "🔹 Deploying infrastructure..."
           terraform apply -auto-approve
-          echo "✅ Infrastructure deployed successfully."
+          NEW_EC2_IP=$(terraform output -raw ec2_public_ip)
+          echo "✅ New EC2 Public IP: $NEW_EC2_IP"
+          echo "EC2_PUBLIC_IP=$NEW_EC2_IP" >> $GITHUB_ENV
 
   deploy-app:
     name: Deploy Application on EC2
@@ -99,14 +94,15 @@ jobs:
       - name: SSH into EC2 & Deploy Containers
         env:
           PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          EC2_HOST: ${{ secrets.EC2_PUBLIC_IP }}
+          EC2_HOST: ${{ env.EC2_PUBLIC_IP }}
         run: |
           echo "$PRIVATE_KEY" > vockey.pem
           chmod 400 vockey.pem
 
-          echo "🔹 Connecting to EC2..."
+          echo "🔹 Connecting to EC2 at $EC2_HOST..."
           ssh -o StrictHostKeyChecking=no -i vockey.pem ec2-user@$EC2_HOST << 'EOF'
             set -e
+            echo "✅ Connected successfully!"
 
             echo "🔹 Updating system packages..."
             sudo yum update -y
@@ -134,22 +130,19 @@ jobs:
             docker pull ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
             echo "✅ Web app image pulled successfully."
 
-            echo "🔹 Starting Web App Containers with Different Backgrounds..."
+            echo "🔹 Starting Web App Containers with Different Background Colors..."
             
             docker run -d -p 8080:8080 --link mysql-db:mysql --name web-app-1 \
-              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db \
-              -e BG_COLOR="red" ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
-            echo "✅ Web App 1 (Red Background) started on port 8080"
+              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db -e BG_COLOR=red \
+              ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
 
             docker run -d -p 8081:8080 --link mysql-db:mysql --name web-app-2 \
-              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db \
-              -e BG_COLOR="blue" ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
-            echo "✅ Web App 2 (Blue Background) started on port 8081"
+              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db -e BG_COLOR=blue \
+              ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
 
             docker run -d -p 8082:8080 --link mysql-db:mysql --name web-app-3 \
-              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db \
-              -e BG_COLOR="green" ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
-            echo "✅ Web App 3 (Green Background) started on port 8082"
+              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db -e BG_COLOR=green \
+              ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
 
-            echo "🔹 Deployment completed successfully!"
+            echo "✅ Web app containers deployed successfully!"
           EOF
