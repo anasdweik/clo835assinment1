@@ -33,10 +33,8 @@ jobs:
           ECR_REPOSITORY: mysql-database
           IMAGE_TAG: latest
         run: |
-          echo "🔹 Building MySQL Docker Image..."
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile_mysql .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "✅ MySQL Image pushed successfully."
 
       - name: Build, Tag, and Push Web App Image
         env:
@@ -44,10 +42,8 @@ jobs:
           ECR_REPOSITORY: employee-database-app
           IMAGE_TAG: latest
         run: |
-          echo "🔹 Building Web App Docker Image..."
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "✅ Web App Image pushed successfully."
 
   deploy-infrastructure:
     name: Deploy AWS Infrastructure with Terraform
@@ -68,32 +64,18 @@ jobs:
 
       - name: Install Terraform
         run: |
-          echo "🔹 Installing Terraform..."
           sudo apt-get update && sudo apt-get install -y unzip
           curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
           sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
           sudo apt-get update && sudo apt-get install terraform
-          terraform --version
-          echo "✅ Terraform installed successfully."
 
-      - name: Check Terraform Files
-        run: |
-          echo "🔹 Checking for Terraform configuration files..."
-          ls -la terraform/ || echo "⚠️ No Terraform files found!"
-          
       - name: Initialize Terraform
         working-directory: terraform
-        run: |
-          echo "🔹 Initializing Terraform..."
-          terraform init
-          echo "✅ Terraform initialized."
+        run: terraform init
 
       - name: Apply Terraform Plan
         working-directory: terraform
-        run: |
-          echo "🔹 Applying Terraform Configuration..."
-          terraform apply -auto-approve
-          echo "✅ Infrastructure deployed successfully."
+        run: terraform apply -auto-approve
 
       - name: Get EC2 Public IP
         working-directory: terraform
@@ -109,45 +91,29 @@ jobs:
       - name: SSH into EC2 & Deploy Containers
         env:
           PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          EC2_HOST: ${{ env.EC2_PUBLIC_IP }}
         run: |
           echo "$PRIVATE_KEY" > vockey.pem
           chmod 400 vockey.pem
 
-          echo "🔹 Connecting to EC2 ($EC2_PUBLIC_IP)..."
-          ssh -o StrictHostKeyChecking=no -i vockey.pem ec2-user@$EC2_PUBLIC_IP << 'EOF'
-            set -e  # Exit on error
+          echo "🔹 Connecting to EC2 at $EC2_HOST..."
+          ssh -o StrictHostKeyChecking=no -i vockey.pem ec2-user@$EC2_HOST << 'EOF'
+            set -e  
 
-            echo "🔹 Updating system packages..."
             sudo yum update -y
-
-            echo "🔹 Installing Docker..."
             sudo yum install -y docker
             sudo systemctl start docker
             sudo usermod -aG docker ec2-user
 
-            echo "🔹 Logging in to Amazon ECR..."
             aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
 
-            echo "🔹 Pulling MySQL Docker Image..."
             docker pull ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
-            echo "✅ MySQL image pulled successfully."
-
-            echo "🔹 Starting MySQL Container..."
             docker run -d --name mysql-db -e MYSQL_ROOT_PASSWORD=rootpassword -e MYSQL_DATABASE=employee_db ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
-            echo "✅ MySQL container started."
 
-            echo "⏳ Waiting for MySQL to initialize..."
             sleep 20
 
-            echo "🔹 Pulling Web App Docker Image..."
             docker pull ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
-            echo "✅ Web app image pulled successfully."
-
-            echo "🔹 Starting Web App Container..."
             docker run -d -p 8080:8080 --link mysql-db:mysql --name web-app \
               -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db \
               ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
-            echo "✅ Web app container started."
-
-            echo "🔹 Deployment completed successfully!"
           EOF
