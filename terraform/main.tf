@@ -44,7 +44,7 @@ resource "aws_instance" "web_server" {
   }
 }
 
-# Web App ECR Repository
+# Web App ECR Repository (Prevent Recreation)
 resource "aws_ecr_repository" "web_app_repo" {
   name = "employee-database-app"
 
@@ -53,7 +53,7 @@ resource "aws_ecr_repository" "web_app_repo" {
   }
 }
 
-# MySQL ECR Repository
+# MySQL ECR Repository (Prevent Recreation)
 resource "aws_ecr_repository" "mysql_repo" {
   name = "mysql-database"
 
@@ -61,4 +61,5 @@ resource "aws_ecr_repository" "mysql_repo" {
     ignore_changes = [name]
   }
 }
+
 
