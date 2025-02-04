@@ -1,4 +1,4 @@
-name: CI/CD for MySQL and Web App
+name: CI/CD Pipeline for Web App Deployment
 
 on:
   push:
@@ -6,53 +6,55 @@ on:
       - main
 
 jobs:
-  build_and_push_mysql:
+  deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: Log in to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v1
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: latest
 
-      - name: Build and Push MySQL Docker Image
+      - name: Initialize Terraform
+        run: terraform init
+
+      - name: Apply Terraform (Deploy EC2 and ECR)
+        run: terraform apply -auto-approve
+
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+
+      - name: Build and Push MySQL Image
         run: |
           docker build -t mysql-database -f Dockerfile_mysql .
           docker tag mysql-database:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mysql-database:latest
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mysql-database:latest
 
-  build_and_push_webapp:
-    runs-on: ubuntu-latest
-    needs: build_and_push_mysql  # Wait for MySQL image to be built first
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-
-      - name: Log in to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v1
-
-      - name: Build and Push Web App Docker Image
+      - name: Build and Push Web App Image
         run: |
           docker build -t employee-database-app -f Dockerfile .
           docker tag employee-database-app:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/employee-database-app:latest
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/employee-database-app:latest
+
+      - name: Deploy Containers on EC2
+        run: |
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > private_key.pem
+          chmod 600 private_key.pem
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ec2-user@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
+            docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mysql-database:latest
+            docker pull ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/employee-database-app:latest
+            
+            docker run -d --name mysql-db -e MYSQL_ROOT_PASSWORD=rootpassword -p 3306:3306 ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/mysql-database:latest
+            docker run -d -p 8080:8080 --link mysql-db:mysql --name web-app -e DBPORT=3306 -e DBHOST=mysql-db -e DBUSER=root -e DBPASS=rootpassword -e DBNAME=employee_db ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com/employee-database-app:latest
+          EOF
