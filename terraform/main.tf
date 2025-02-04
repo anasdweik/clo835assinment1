@@ -6,17 +6,17 @@ provider "aws" {
 data "aws_security_group" "existing_sg" {
   filter {
     name   = "group-name"
-    values = ["web-sg"]  # ✅ Using existing security group
+    values = ["web-sg"]
   }
 }
 
 # 🔹 Deploy EC2 instance
 resource "aws_instance" "web_server" {
-  ami                    = "ami-0c614dee691cbbf37"  # ✅ Replace with your correct AMI ID
+  ami                    = "ami-0c614dee691cbbf37"
   instance_type          = "t2.micro"
-  key_name               = "vockey"  # ✅ Use your actual key pair
-  vpc_security_group_ids = [data.aws_security_group.existing_sg.id]  # ✅ Attach existing security group
-  associate_public_ip_address = true  # ✅ Ensures the instance gets a public IP
+  key_name               = "vockey"
+  vpc_security_group_ids = [data.aws_security_group.existing_sg.id]
+  associate_public_ip_address = true
 
   tags = {
     Name = "Employee-Database-App-Server"
@@ -33,7 +33,7 @@ data "aws_ecr_repository" "mysql_repo" {
   name = "mysql-database"
 }
 
-# 🔹 Output EC2 Public IP for GitHub Actions (No Manual Updates Needed)
+# 🔹 Output EC2 Public IP for GitHub Actions
 output "ec2_public_ip" {
   description = "The public IP of the EC2 instance"
   value       = aws_instance.web_server.public_ip
