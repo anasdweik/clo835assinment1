@@ -98,7 +98,7 @@ jobs:
 
           echo "🔹 Connecting to EC2 at $EC2_HOST..."
           ssh -o StrictHostKeyChecking=no -i vockey.pem ec2-user@$EC2_HOST << 'EOF'
-            set -e  
+            set -e
 
             sudo yum update -y
             sudo yum install -y docker
