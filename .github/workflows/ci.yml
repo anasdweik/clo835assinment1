@@ -23,10 +23,9 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}  # Ensure session token is used if required
           aws-region: us-east-1
 
-     - name: Login to Amazon ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v1
-
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
 
       - name: Build and Push MySQL Image
         run: |
