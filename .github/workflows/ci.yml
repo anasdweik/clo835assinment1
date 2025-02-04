@@ -33,7 +33,7 @@ jobs:
           docker build -t mysql-database -f Dockerfile_mysql .
           
           echo "🔹 Tagging MySQL Image..."
-          docker tag mysql-database:latest ${{ secrets.ECR_REGISTRY }}/mysql-database:latest  # ✅ Corrected tag format
+          docker tag mysql-database:latest ${{ secrets.ECR_REGISTRY }}/mysql-database:latest  # ✅ Fixed tag format
           
           echo "🔹 Pushing MySQL Image to AWS ECR..."
           docker push ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
@@ -45,7 +45,7 @@ jobs:
           docker build -t employee-database-app -f Dockerfile .
           
           echo "🔹 Tagging Web App Image..."
-          docker tag employee-database-app:latest ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest  # ✅ Corrected tag format
+          docker tag employee-database-app:latest ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest  # ✅ Fixed tag format
           
           echo "🔹 Pushing Web App Image to AWS ECR..."
           docker push ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
