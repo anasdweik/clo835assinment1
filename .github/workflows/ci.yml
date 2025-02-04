@@ -29,7 +29,7 @@ jobs:
 
       - name: Build, Tag, and Push MySQL Image
         env:
-          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: mysql-database
           IMAGE_TAG: latest
         run: |
@@ -40,7 +40,7 @@ jobs:
 
       - name: Build, Tag, and Push Web App Image
         env:
-          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: employee-database-app
           IMAGE_TAG: latest
         run: |
@@ -100,11 +100,11 @@ jobs:
           PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           EC2_HOST: ${{ env.EC2_PUBLIC_IP }}
         run: |
-          echo "$PRIVATE_KEY" > ec2-key.pem
-          chmod 600 ec2-key.pem
+          echo "$PRIVATE_KEY" > vockey.pem
+          chmod 400 vockey.pem
 
           echo "🔹 Connecting to EC2 at $EC2_HOST..."
-          ssh -o StrictHostKeyChecking=no -i ec2-key.pem ec2-user@$EC2_HOST << 'EOF'
+          ssh -o StrictHostKeyChecking=no -i vockey.pem ec2-user@$EC2_HOST << 'EOF'
             set -e  
             echo "✅ Connected successfully!"
 
