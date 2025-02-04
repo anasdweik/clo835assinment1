@@ -33,10 +33,10 @@ jobs:
           docker build -t mysql-database -f Dockerfile_mysql .
           
           echo "🔹 Tagging MySQL Image..."
-          docker tag mysql-database:latest ${secrets.ECR_REGISTRY}/mysql-database:latest
+          docker tag mysql-database:latest ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
           
           echo "🔹 Pushing MySQL Image to AWS ECR..."
-          docker push ${secrets.ECR_REGISTRY}/mysql-database:latest
+          docker push ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
           echo "✅ MySQL Image pushed successfully."
 
       - name: Build and Push Web App Image
@@ -45,10 +45,10 @@ jobs:
           docker build -t employee-database-app -f Dockerfile .
           
           echo "🔹 Tagging Web App Image..."
-          docker tag employee-database-app:latest ${secrets.ECR_REGISTRY}/employee-database-app:latest
+          docker tag employee-database-app:latest ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
           
           echo "🔹 Pushing Web App Image to AWS ECR..."
-          docker push ${secrets.ECR_REGISTRY}/employee-database-app:latest
+          docker push ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
           echo "✅ Web App Image pushed successfully."
 
   deploy-infrastructure:
@@ -117,27 +117,27 @@ jobs:
             sudo usermod -aG docker ec2-user
 
             echo "🔹 Logging in to Amazon ECR..."
-            aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${secrets.ECR_REGISTRY}
+            aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
 
             echo "🔹 Pulling MySQL Docker Image..."
-            docker pull ${secrets.ECR_REGISTRY}/mysql-database:latest
+            docker pull ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
             echo "✅ MySQL image pulled successfully."
 
             echo "🔹 Starting MySQL Container..."
-            docker run -d --name mysql-db -e MYSQL_ROOT_PASSWORD=rootpassword -e MYSQL_DATABASE=employee_db ${secrets.ECR_REGISTRY}/mysql-database:latest
+            docker run -d --name mysql-db -e MYSQL_ROOT_PASSWORD=rootpassword -e MYSQL_DATABASE=employee_db ${{ secrets.ECR_REGISTRY }}/mysql-database:latest
             echo "✅ MySQL container started."
 
             echo "⏳ Waiting for MySQL to initialize..."
             sleep 20
 
             echo "🔹 Pulling Web App Docker Image..."
-            docker pull ${secrets.ECR_REGISTRY}/employee-database-app:latest
+            docker pull ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
             echo "✅ Web app image pulled successfully."
 
             echo "🔹 Starting Web App Container..."
             docker run -d -p 8080:8080 --link mysql-db:mysql --name web-app \
               -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db \
-              ${secrets.ECR_REGISTRY}/employee-database-app:latest
+              ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
             echo "✅ Web app container started."
 
             echo "🔹 Deployment completed successfully!"
