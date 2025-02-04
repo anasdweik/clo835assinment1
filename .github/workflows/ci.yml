@@ -30,26 +30,22 @@ jobs:
       - name: Build, Tag, and Push MySQL Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: mysql-database  # ✅ Corrected repository name
+          ECR_REPOSITORY: mysql-database
           IMAGE_TAG: latest
         run: |
           echo "🔹 Building MySQL Docker Image..."
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile_mysql .
-          
-          echo "🔹 Pushing MySQL Image to AWS ECR..."
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "✅ MySQL Image pushed successfully."
 
       - name: Build, Tag, and Push Web App Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: employee-database-app  # ✅ Corrected repository name
+          ECR_REPOSITORY: employee-database-app
           IMAGE_TAG: latest
         run: |
           echo "🔹 Building Web App Docker Image..."
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile .
-          
-          echo "🔹 Pushing Web App Image to AWS ECR..."
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "✅ Web App Image pushed successfully."
 
@@ -80,13 +76,20 @@ jobs:
           terraform --version
           echo "✅ Terraform installed successfully."
 
+      - name: Check Terraform Files
+        run: |
+          echo "🔹 Checking for Terraform configuration files..."
+          ls -la terraform/ || echo "⚠️ No Terraform files found!"
+          
       - name: Initialize Terraform
+        working-directory: terraform
         run: |
           echo "🔹 Initializing Terraform..."
           terraform init
           echo "✅ Terraform initialized."
 
       - name: Apply Terraform Plan
+        working-directory: terraform
         run: |
           echo "🔹 Applying Terraform Configuration..."
           terraform apply -auto-approve
@@ -130,7 +133,7 @@ jobs:
             echo "✅ MySQL container started."
 
             echo "⏳ Waiting for MySQL to initialize..."
-            sleep 20  # Ensures MySQL starts before Web App
+            sleep 20
 
             echo "🔹 Pulling Web App Docker Image..."
             docker pull ${{ secrets.ECR_REGISTRY }}/employee-database-app:latest
