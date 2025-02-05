@@ -89,8 +89,9 @@ jobs:
         id: ec2-ip
         run: |
           echo "🔹 Fetching EC2 Public IP..."
-          echo "EC2_PUBLIC_IP=$(terraform output -raw ec2_public_ip)" >> $GITHUB_ENV
-          echo "✅ EC2 Public IP retrieved."
+          EC2_IP=$(terraform output -raw ec2_public_ip)
+          echo "✅ EC2 Public IP: $EC2_IP"
+          echo "EC2_PUBLIC_IP=$EC2_IP" >> $GITHUB_ENV
 
   deploy-app:
     name: Deploy Application on EC2
@@ -101,7 +102,7 @@ jobs:
       - name: SSH into EC2 & Deploy Containers
         env:
           PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          EC2_HOST: ${{ env.EC2_PUBLIC_IP }}
+          EC2_HOST: ${{ env.EC2_PUBLIC_IP }}  # Correct way to reference Terraform output
         run: |
           echo "$PRIVATE_KEY" > vockey.pem
           chmod 400 vockey.pem
@@ -130,4 +131,25 @@ jobs:
             docker run -d --name mysql-db -e MYSQL_ROOT_PASSWORD=rootpassword -e MYSQL_DATABASE=employee_db $ECR_REGISTRY/mysql-database:latest
             echo "✅ MySQL container started."
 
-            echo "⏳ Waiting
+            echo "⏳ Waiting for MySQL to initialize..."
+            sleep 20
+
+            echo "🔹 Pulling Web App Docker Image..."
+            docker pull $ECR_REGISTRY/employee-database-app:latest
+            echo "✅ Web app image pulled successfully."
+
+            echo "🔹 Starting Web App Containers with Different Background Colors..."
+            docker run -d -p 8080:8080 --link mysql-db:mysql --name web-app-1 \
+              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db -e BG_COLOR=red \
+              $ECR_REGISTRY/employee-database-app:latest
+
+            docker run -d -p 8081:8080 --link mysql-db:mysql --name web-app-2 \
+              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db -e BG_COLOR=blue \
+              $ECR_REGISTRY/employee-database-app:latest
+
+            docker run -d -p 8082:8080 --link mysql-db:mysql --name web-app-3 \
+              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db -e BG_COLOR=green \
+              $ECR_REGISTRY/employee-database-app:latest
+
+            echo "✅ Web app containers deployed successfully!"
+          EOF
