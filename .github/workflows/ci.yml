@@ -107,12 +107,13 @@ jobs:
       - name: SSH into EC2 & Deploy Containers
         env:
           PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          EC2_HOST: ${{ env.EC2_PUBLIC_IP }}  # ✅ Correct way to reference Terraform output
         run: |
           echo "$PRIVATE_KEY" > vockey.pem
           chmod 400 vockey.pem
 
-          echo "🔹 Connecting to EC2 at $EC2_PUBLIC_IP..."
-          ssh -o StrictHostKeyChecking=no -i vockey.pem ec2-user@$EC2_PUBLIC_IP << 'EOF'
+          echo "🔹 Connecting to EC2 at $EC2_HOST..."
+          ssh -o StrictHostKeyChecking=no -i vockey.pem ec2-user@$EC2_HOST << 'EOF'
             set -e  
             echo "✅ Connected successfully!"
 
