@@ -68,18 +68,27 @@ jobs:
 
       - name: Install Terraform
         run: |
+          echo "🔹 Installing Terraform..."
           sudo apt-get update && sudo apt-get install -y unzip
           curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
           sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
           sudo apt-get update && sudo apt-get install terraform
+          terraform --version
+          echo "✅ Terraform installed successfully."
 
       - name: Initialize Terraform
         working-directory: terraform
-        run: terraform init
+        run: |
+          echo "🔹 Initializing Terraform..."
+          terraform init
+          echo "✅ Terraform initialized."
 
       - name: Apply Terraform Plan
         working-directory: terraform
-        run: terraform apply -auto-approve
+        run: |
+          echo "🔹 Applying Terraform Configuration..."
+          terraform apply -auto-approve
+          echo "✅ Infrastructure deployed successfully."
 
       - name: Retrieve EC2 Public IP
         working-directory: terraform
@@ -98,13 +107,12 @@ jobs:
       - name: SSH into EC2 & Deploy Containers
         env:
           PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          EC2_HOST: ${{ env.EC2_PUBLIC_IP }}
         run: |
           echo "$PRIVATE_KEY" > vockey.pem
           chmod 400 vockey.pem
 
-          echo "🔹 Connecting to EC2 at $EC2_HOST..."
-          ssh -o StrictHostKeyChecking=no -i vockey.pem ec2-user@$EC2_HOST << 'EOF'
+          echo "🔹 Connecting to EC2 at $EC2_PUBLIC_IP..."
+          ssh -o StrictHostKeyChecking=no -i vockey.pem ec2-user@$EC2_PUBLIC_IP << 'EOF'
             set -e  
             echo "✅ Connected successfully!"
 
