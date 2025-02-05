@@ -29,7 +29,7 @@ jobs:
 
       - name: Build, Tag, and Push MySQL Image
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
           ECR_REPOSITORY: mysql-database
           IMAGE_TAG: latest
         run: |
@@ -40,7 +40,7 @@ jobs:
 
       - name: Build, Tag, and Push Web App Image
         env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
           ECR_REPOSITORY: employee-database-app
           IMAGE_TAG: latest
         run: |
@@ -83,8 +83,8 @@ jobs:
         run: terraform apply -auto-approve
 
       - name: Retrieve EC2 Public IP
-        working-directory: terraform
         id: ec2-ip
+        working-directory: terraform
         run: |
           echo "🔹 Fetching EC2 Public IP..."
           EC2_IP=$(terraform output -raw ec2_public_ip)
