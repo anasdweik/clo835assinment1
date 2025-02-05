@@ -46,7 +46,7 @@ jobs:
         run: |
           echo "🔹 Building Web App Docker Image..."
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile .
-          docker push $ECR_REPOSITORY/$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "✅ Web App Image pushed successfully."
 
   deploy-infrastructure:
@@ -130,25 +130,4 @@ jobs:
             docker run -d --name mysql-db -e MYSQL_ROOT_PASSWORD=rootpassword -e MYSQL_DATABASE=employee_db $ECR_REGISTRY/mysql-database:latest
             echo "✅ MySQL container started."
 
-            echo "⏳ Waiting for MySQL to initialize..."
-            sleep 20
-
-            echo "🔹 Pulling Web App Docker Image..."
-            docker pull $ECR_REGISTRY/employee-database-app:latest
-            echo "✅ Web app image pulled successfully."
-
-            echo "🔹 Starting Web App Containers with Different Background Colors..."
-            docker run -d -p 8080:8080 --link mysql-db:mysql --name web-app-1 \
-              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db -e BG_COLOR=red \
-              $ECR_REGISTRY/employee-database-app:latest
-
-            docker run -d -p 8081:8080 --link mysql-db:mysql --name web-app-2 \
-              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db -e BG_COLOR=blue \
-              $ECR_REGISTRY/employee-database-app:latest
-
-            docker run -d -p 8082:8080 --link mysql-db:mysql --name web-app-3 \
-              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db -e BG_COLOR=green \
-              $ECR_REGISTRY/employee-database-app:latest
-
-            echo "✅ Web app containers deployed successfully!"
-          EOF
+            echo "⏳ Waiting
