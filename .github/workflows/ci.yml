@@ -1,107 +1,43 @@
-name: CI/CD Pipeline for Employee Database App
+name: Deploy to Amazon ECR
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
+    branches: [ main ]  # Make sure this matches your GitHub branch
 
 jobs:
+
   build-and-push:
-    name: Build & Push Docker Images to AWS ECR
+    name: Build and Push Image
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-          aws-region: us-east-1
+    - name: Check out code
+      uses: actions/checkout@v4
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+        aws-region: us-east-1
 
-      - name: Build, Tag, and Push MySQL Image
-        env:
-          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-          ECR_REPOSITORY: mysql-database
-          IMAGE_TAG: latest
-        run: |
-          echo "🔹 Building MySQL Docker Image..."
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile_mysql .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "✅ MySQL Image pushed successfully."
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Build, Tag, and Push Web App Image
-        env:
-          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-          ECR_REPOSITORY: employee-database-app
-          IMAGE_TAG: latest
-        run: |
-          echo "🔹 Building Web App Docker Image..."
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "✅ Web App Image pushed successfully."
-
-  deploy-app:
-    name: Deploy Application on EC2
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    steps:
-      - name: Load EC2 Public IP from GitHub Secrets
-        run: |
-          echo "EC2_PUBLIC_IP=${{ secrets.EC2_PUBLIC_IP }}" >> $GITHUB_ENV
-          echo "🔹 Loaded EC2 Public IP: $EC2_PUBLIC_IP"
-
-      - name: SSH into EC2 & Deploy Containers
-        env:
-          PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          EC2_HOST: ${{ secrets.EC2_PUBLIC_IP }}
-          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-        run: |
-          echo "$PRIVATE_KEY" > vockey.pem
-          chmod 400 vockey.pem
-
-          echo "🔹 Connecting to EC2 at $EC2_HOST..."
-          ssh -o StrictHostKeyChecking=no -i vockey.pem ec2-user@$EC2_HOST << 'EOF'
-            set -e
-            echo "✅ Connected successfully!"
-
-            echo "🔹 Updating system packages..."
-            sudo yum update -y
-
-            echo "🔹 Installing Docker..."
-            sudo yum install -y docker
-            sudo systemctl start docker
-            sudo usermod -aG docker ec2-user
-
-            echo "🔹 Logging in to Amazon ECR..."
-            aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR_REGISTRY
-
-            echo "🔹 Pulling MySQL Docker Image..."
-            docker pull $ECR_REGISTRY/mysql-database:latest
-            echo "✅ MySQL image pulled successfully."
-
-            echo "🔹 Starting MySQL Container..."
-            docker run -d --name mysql-db -e MYSQL_ROOT_PASSWORD=rootpassword -e MYSQL_DATABASE=employee_db $ECR_REGISTRY/mysql-database:latest
-            echo "✅ MySQL container started."
-
-            echo "⏳ Waiting for MySQL to initialize..."
-            sleep 20
-
-            echo "🔹 Pulling Web App Docker Image..."
-            docker pull $ECR_REGISTRY/employee-database-app:latest
-            echo "✅ Web app image pulled successfully."
-
-            echo "🔹 Starting Web App Containers..." 
-            docker run -d -p 8080:8080 --link mysql-db:mysql --name web-app \
-              -e DBHOST=mysql-db -e DBPORT=3306 -e DBUSER=root -e DBPASSWORD=rootpassword -e DBNAME=employee_db \
-              $ECR_REGISTRY/employee-database-app:latest
-
-            echo "✅ Web app container deployed successfully!"
-          EOF
+    - name: Build, Tag, and Push Image to Amazon ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: webapp-repo  # Change this if your repo name is different
+        IMAGE_TAG: latest
+      run: |
+        # Build Docker image
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f Dockerfile .
+        
+        # Verify Docker images
+        docker images
+        
+        # Push the image to ECR
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
