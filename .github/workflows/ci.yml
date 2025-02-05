@@ -87,8 +87,9 @@ jobs:
         id: ec2-ip
         run: |
           echo "🔹 Fetching EC2 Public IP..."
-          echo "EC2_PUBLIC_IP=$(terraform output -raw ec2_public_ip)" >> $GITHUB_ENV
-          echo "✅ EC2 Public IP retrieved: ${{ env.EC2_PUBLIC_IP }}"
+          EC2_IP=$(terraform output -raw ec2_public_ip)
+          echo "EC2_PUBLIC_IP=$EC2_IP" >> $GITHUB_ENV
+          echo "✅ EC2 Public IP retrieved: $EC2_IP"
 
   deploy-app:
     name: Deploy Application on EC2
@@ -99,11 +100,14 @@ jobs:
       - name: SSH into EC2 & Deploy Containers
         env:
           PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          EC2_HOST: ${{ env.EC2_PUBLIC_IP }}  # Correct way to reference Terraform output
+          EC2_HOST: ${{ env.EC2_PUBLIC_IP }}
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           echo "$PRIVATE_KEY" > vockey.pem
           chmod 400 vockey.pem
+
+          echo "🔹 Debug: EC2_HOST is $EC2_HOST"
+          echo "🔹 Debug: ECR_REGISTRY is $ECR_REGISTRY"
 
           echo "🔹 Connecting to EC2 at $EC2_HOST..."
           ssh -tt -o StrictHostKeyChecking=no -i vockey.pem ec2-user@$EC2_HOST << 'EOF'
