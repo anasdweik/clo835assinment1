@@ -30,7 +30,7 @@ jobs:
     - name: Build, Tag, and Push Image to Amazon ECR
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        ECR_REPOSITORY: webapp-repo  # Change this if your repo name is different
+        ECR_REPOSITORY: employee-database-app  # Change this if your repo name is different
         IMAGE_TAG: latest
       run: |
         # Build Docker image
