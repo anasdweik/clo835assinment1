@@ -49,7 +49,7 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "✅ Web App Image pushed successfully."
 
-deploy-infrastructure:
+  deploy-infrastructure:
     name: Deploy AWS Infrastructure with Terraform
     runs-on: ubuntu-latest
     needs: build-and-push
@@ -93,7 +93,7 @@ deploy-infrastructure:
           echo "EC2_PUBLIC_IP=$EC2_IP" >> $GITHUB_ENV  
 
           
-    deploy-app:
+  deploy-app:
      name: Deploy Application on EC2
      runs-on: ubuntu-latest
      needs: deploy-infrastructure
