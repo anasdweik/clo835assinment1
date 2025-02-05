@@ -99,7 +99,10 @@ jobs:
 
     steps:
       - name: Load EC2 Public IP from Previous Step
-        run: echo "EC2_PUBLIC_IP=$EC2_PUBLIC_IP" >> $GITHUB_ENV
+        run: |
+          source $GITHUB_ENV
+          echo "EC2_PUBLIC_IP=$EC2_PUBLIC_IP" >> $GITHUB_ENV
+          echo "🔹 Loaded EC2 Public IP: $EC2_PUBLIC_IP"
 
       - name: SSH into EC2 & Deploy Containers
         env:
